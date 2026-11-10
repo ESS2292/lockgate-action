@@ -1,0 +1,15 @@
+{
+  "name": "lockgate-action",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Free GitHub Action: fail CI when mixed lockfiles are committed or CI runs an unfrozen install. Zero dependencies. Lite version of LockGate.",
+  "main": "src/main.js",
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "author": "Emilio Straubel",
+  "license": "MIT"
+}

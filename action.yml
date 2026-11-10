@@ -1,0 +1,27 @@
+name: "LockGate Lite: mixed lockfiles and unfrozen CI"
+description: "Fail the job when a repository has mixed package-manager lockfiles, a missing lockfile, a packageManager mismatch, or CI that runs npm install instead of a frozen install. Zero dependencies."
+author: "Emilio Straubel"
+branding:
+  icon: "lock"
+  color: "blue"
+inputs:
+  root:
+    description: "Project directory to scan, relative to the workspace (default: the workspace root)."
+    required: false
+    default: "."
+  ignore:
+    description: "Comma-separated relative path prefixes to skip (for example 'examples,docs/fixtures')."
+    required: false
+    default: ""
+outputs:
+  ok:
+    description: "'true' if the check passed, otherwise 'false'."
+  errors:
+    description: "Number of error findings."
+  warnings:
+    description: "Number of warning findings."
+  codes:
+    description: "Comma-separated error codes (for example mixed-lockfiles,unfrozen-ci). Empty when there are no errors."
+runs:
+  using: "node24"
+  main: "src/main.js"
