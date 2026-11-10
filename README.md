@@ -98,9 +98,11 @@ The action runs on the `node24` runtime, which GitHub-hosted runners require for
 
 Questions and bug reports: [open an issue](https://github.com/ESS2292/lockgate-action/issues).
 
-## Related
+## Related tools
 
-LockGate checks whether the dependency install is frozen and repeatable. For Node.js version pins that drift across `.nvmrc`, Docker, and `setup-node`, the free [RuntimeGate Lite Action](https://github.com/ESS2292/runtimegate-action) fails the job when those declarations disagree. For missing environment variables, use the free [EnvGate Lite Action](https://github.com/ESS2292/envgate-action).
+- [LockGate Lite](https://github.com/ESS2292/lockgate-action) — this Action. Fail the job when mixed lockfiles are committed or CI runs an unfrozen install.
+- [EnvGate Lite](https://github.com/ESS2292/envgate-action) — fail the job when a required env var from `.env.example` is missing.
+- [RuntimeGate Lite](https://github.com/ESS2292/runtimegate-action) — fail the job when Node.js version pins in version files, Docker, and `setup-node` disagree.
 
 ## Changelog
 
