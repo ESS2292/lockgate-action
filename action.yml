@@ -13,6 +13,14 @@ inputs:
     description: "Comma-separated relative path prefixes to skip (for example 'examples,docs/fixtures')."
     required: false
     default: ""
+  lockfile-policy:
+    description: "How to treat a missing or gitignored lockfile: auto (default; a gitignored lockfile is a library policy), library (same policy even without a gitignore), or app (always require a committed lockfile and flag unfrozen CI installs)."
+    required: false
+    default: "auto"
+  skip-fixtures:
+    description: "Skip package manifests under tests/fixtures, test/fixtures, __tests__/fixtures, and spec/fixtures (default: true)."
+    required: false
+    default: "true"
 outputs:
   ok:
     description: "'true' if the check passed, otherwise 'false'."

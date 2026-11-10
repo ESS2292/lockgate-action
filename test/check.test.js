@@ -191,4 +191,84 @@ describe('LockGate Lite checks', () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('downgrades a missing gitignored lockfile to a warning and does not flag npm install', () => {
+    const dir = makeRepo({
+      'package.json': JSON.stringify({ name: 'demo', version: '1.0.0', dependencies: { debug: '^4.0.0' } }),
+      '.gitignore': 'package-lock.json\nyarn.lock\npnpm-lock.yaml\n',
+      '.github/workflows/ci.yml': 'on: push\njobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm install\n',
+    });
+    try {
+      const result = runCheck({ root: dir });
+      assert.equal(result.ok, true, JSON.stringify(result.findings));
+      const missing = result.findings.find((f) => f.code === 'missing-lockfile');
+      assert.ok(missing);
+      assert.equal(missing.severity, 'warning');
+      assert.match(missing.message, /library policy/);
+      assert.ok(!codes(result).includes('unfrozen-ci'));
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('treats lockfile-policy=library as a warning without a gitignore, and app still errors', () => {
+    const lib = makeRepo({
+      'package.json': JSON.stringify({ name: 'demo', version: '1.0.0', dependencies: { debug: '^4.0.0' } }),
+      '.github/workflows/ci.yml': 'on: push\njobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm install\n',
+    });
+    const ignored = makeRepo({
+      'package.json': JSON.stringify({ name: 'demo', version: '1.0.0', dependencies: { debug: '^4.0.0' } }),
+      '.gitignore': 'package-lock.json\n',
+      '.github/workflows/ci.yml': 'on: push\njobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm install\n',
+    });
+    try {
+      const library = runCheck({ root: lib, lockfilePolicy: 'library' });
+      assert.equal(library.ok, true, JSON.stringify(library.findings));
+      assert.equal(library.findings.find((f) => f.code === 'missing-lockfile').severity, 'warning');
+      assert.ok(!codes(library).includes('unfrozen-ci'));
+
+      const app = runCheck({ root: ignored, lockfilePolicy: 'app' });
+      assert.equal(app.ok, false);
+      assert.equal(app.findings.find((f) => f.code === 'missing-lockfile').severity, 'error');
+      assert.ok(codes(app).includes('unfrozen-ci'));
+    } finally {
+      fs.rmSync(lib, { recursive: true, force: true });
+      fs.rmSync(ignored, { recursive: true, force: true });
+    }
+  });
+
+  it('skips tests/fixtures manifests by default, and includes them when skipFixtures is false', () => {
+    const dir = makeRepo({
+      'package.json': JSON.stringify({ name: 'root', version: '1.0.0', dependencies: { 'left-pad': '^1.3.0' } }),
+      'package-lock.json': '{"lockfileVersion":3,"packages":{}}\n',
+      'tests/fixtures/demo/package.json': JSON.stringify({ name: 'demo', version: '1.0.0', dependencies: { debug: '^4.0.0' } }),
+      'tests/fixtures/demo/package-lock.json': '{"lockfileVersion":3,"packages":{}}\n',
+      'tests/fixtures/demo/yarn.lock': '# yarn lockfile v1\n',
+    });
+    try {
+      const skipped = runCheck({ root: dir });
+      assert.equal(skipped.ok, true, JSON.stringify(skipped.findings));
+      assert.ok(!codes(skipped).includes('mixed-lockfiles'));
+      const included = runCheck({ root: dir, skipFixtures: false });
+      assert.equal(included.ok, false);
+      assert.ok(included.findings.some((f) => f.code === 'mixed-lockfiles' && /tests\/fixtures/.test(f.file || f.message)));
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('still errors on mixed lockfiles in an app repo (nightdeck-style)', () => {
+    const dir = makeRepo({
+      'package.json': JSON.stringify({ name: 'demo', version: '1.0.0', dependencies: { 'left-pad': '^1.3.0' } }),
+      'package-lock.json': '{"lockfileVersion":3,"packages":{}}\n',
+      'pnpm-lock.yaml': 'lockfileVersion: "9.0"\n',
+    });
+    try {
+      const result = runCheck({ root: dir });
+      assert.equal(result.ok, false);
+      assert.ok(result.findings.some((f) => f.code === 'mixed-lockfiles' && f.severity === 'error'));
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

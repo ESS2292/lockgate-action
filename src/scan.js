@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { parseIgnoreRules } = require('./ignore');
 
 const SKIP_DIRS = new Set([
   '.git',
@@ -41,13 +42,22 @@ function isWorkflowFile(rel, name) {
   );
 }
 
-function walk(root, ignorePrefixes) {
+const FIXTURE_PATH = /(?:^|\/)(?:tests|test|__tests__|spec)\/fixtures(?:\/|$)/;
+
+function isFixturePath(rel) {
+  return FIXTURE_PATH.test(String(rel).replace(/\\/g, '/'));
+}
+
+function walk(root, ignorePrefixes, options = {}) {
   const files = [];
   const prefixes = (ignorePrefixes || []).map((p) => p.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/$/, ''));
+  const skipFixtures = options.skipFixtures !== false;
 
   function skipped(rel) {
     const n = rel.replace(/\\/g, '/');
-    return prefixes.some((p) => n === p || n.startsWith(`${p}/`));
+    if (prefixes.some((p) => n === p || n.startsWith(`${p}/`))) return true;
+    if (skipFixtures && isFixturePath(n)) return true;
+    return false;
   }
 
   function rec(dir, relDir) {
@@ -90,12 +100,13 @@ function parsePackageManagerField(value) {
 
 function scan(root, options = {}) {
   const absRoot = path.resolve(root);
-  const files = walk(absRoot, options.ignore || []);
+  const files = walk(absRoot, options.ignore || [], { skipFixtures: options.skipFixtures });
   const result = {
     root: absRoot,
     manifests: [],
     lockfiles: [],
     workflows: [],
+    gitignores: [],
     scanErrors: [],
   };
 
@@ -143,10 +154,20 @@ function scan(root, options = {}) {
         continue;
       }
       result.workflows.push({ file: f.rel, text });
+    } else if (f.name === '.gitignore') {
+      const text = readText(f.abs);
+      if (typeof text === 'string') {
+        const dir = path.posix.dirname(f.rel.replace(/\\/g, '/'));
+        result.gitignores.push({
+          file: f.rel,
+          dir: dir === '.' ? '' : dir,
+          rules: parseIgnoreRules(text),
+        });
+      }
     }
   }
 
   return result;
 }
 
-module.exports = { scan, LOCKFILES, ALL_LOCK_NAMES, SKIP_DIRS, parsePackageManagerField };
+module.exports = { scan, LOCKFILES, ALL_LOCK_NAMES, SKIP_DIRS, parsePackageManagerField, isFixturePath };

@@ -4,6 +4,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { runCheck } = require('./index');
 const { formatHuman } = require('./format');
+const { parseLockfilePolicy } = require('./policy');
 
 function getInput(name, env) {
   const v = env[`INPUT_${name.replace(/ /g, '_').toUpperCase()}`];
@@ -70,6 +71,10 @@ function run(env = process.env, io = {}) {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+  const policyInput = getInput('lockfile-policy', env) || 'auto';
+  const lockfilePolicy = parseLockfilePolicy(policyInput);
+  const skipFixturesInput = (getInput('skip-fixtures', env) || 'true').toLowerCase();
+  const skipFixtures = skipFixturesInput !== 'false' && skipFixturesInput !== '0' && skipFixturesInput !== 'no';
   const root = path.resolve(cwd, rootInput);
 
   const failSetup = (msg) => {
@@ -92,7 +97,11 @@ function run(env = process.env, io = {}) {
     return failSetup(`Scan root is not a directory: ${rootInput}`);
   }
 
-  const result = runCheck({ root, ignore });
+  if (!lockfilePolicy) {
+    return failSetup(`Unknown lockfile-policy "${policyInput}". Use auto, library, or app.`);
+  }
+
+  const result = runCheck({ root, ignore, lockfilePolicy, skipFixtures });
   const errors = result.findings.filter((f) => f.severity === 'error');
   const warnings = result.findings.filter((f) => f.severity === 'warning');
   const codes = [...new Set(errors.map((f) => f.code))].join(',');

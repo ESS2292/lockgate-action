@@ -77,4 +77,30 @@ describe('LockGate Lite action', () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('passes a library repo that gitignores lockfiles and runs npm install', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lglite-lib-'));
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
+      name: 'lib',
+      version: '1.0.0',
+      dependencies: { debug: '^4.0.0' },
+    }));
+    fs.writeFileSync(path.join(dir, '.gitignore'), 'package-lock.json\nyarn.lock\n');
+    fs.mkdirSync(path.join(dir, '.github', 'workflows'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.github', 'workflows', 'ci.yml'), 'on: push\njobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm install\n');
+    try {
+      const { code, lines } = capture({ INPUT_ROOT: '.' }, dir);
+      assert.equal(code, 0, lines.join('\n'));
+      assert.ok(lines.some((l) => /library policy/.test(l) || /missing-lockfile/.test(l)), lines.join('\n'));
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns 1 for an unknown lockfile-policy input', () => {
+    const cwd = path.join(__dirname, 'fixtures/clean');
+    const { code, lines } = capture({ INPUT_ROOT: '.', 'INPUT_LOCKFILE-POLICY': 'maybe' }, cwd);
+    assert.equal(code, 1);
+    assert.ok(lines.some((l) => /Unknown lockfile-policy/.test(l)), lines.join('\n'));
+  });
 });

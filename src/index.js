@@ -9,10 +9,15 @@ const { analyze } = require('./check');
  * @param {object} options
  * @param {string} options.root
  * @param {string[]} [options.ignore]
+ * @param {string} [options.lockfilePolicy] auto | library | app
+ * @param {boolean} [options.skipFixtures] default true
  */
 function runCheck(options) {
-  const collected = scan(options.root, { ignore: options.ignore });
-  return analyze(collected);
+  const collected = scan(options.root, {
+    ignore: options.ignore,
+    skipFixtures: options.skipFixtures,
+  });
+  return analyze(collected, { lockfilePolicy: options.lockfilePolicy });
 }
 
 module.exports = { runCheck };

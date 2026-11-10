@@ -12,7 +12,7 @@ A repository can commit both `package-lock.json` and `pnpm-lock.yaml`, or run `n
 - **A Lite subset.** npm manifest-vs-lockfile sync, Dockerfile `COPY` / `RUN` checks, `--json`, and a local CLI are described on the [LockGate site](https://ess2292.github.io/lockgate/).
 - **Free and MIT-licensed.**
 
-The scanner modules under `src/` (except `main.js`) are vendored from LockGate 0.1.0 and restricted to mixed or missing lockfiles, `packageManager` mismatches, and unfrozen CI installs by the Action wrapper.
+The scanner modules under `src/` (except `main.js`) are vendored from LockGate 0.1.0 and restricted to mixed or missing lockfiles, `packageManager` mismatches, and unfrozen CI installs by the Action wrapper. Lite reads `.gitignore` only to detect an intentional library lockfile policy.
 
 The pre-launch product page (not indexed; checkout is not live) is at [ess2292.github.io/lockgate](https://ess2292.github.io/lockgate/).
 
@@ -48,6 +48,8 @@ jobs:
 | --- | --- | --- |
 | `root` | `.` | Project directory to scan, relative to the workspace |
 | `ignore` | (empty) | Comma-separated relative path prefixes to skip |
+| `lockfile-policy` | `auto` | `auto` treats a gitignored lockfile as an intentional library policy (warnings, and unfrozen CI installs are not flagged). `library` forces that policy even without a gitignore. `app` always requires a committed lockfile and flags unfrozen installs. |
+| `skip-fixtures` | `true` | Skip package manifests under `tests/fixtures`, `test/fixtures`, `__tests__/fixtures`, and `spec/fixtures`. Set to `false` to include them. |
 
 ## Outputs
 
@@ -62,15 +64,17 @@ jobs:
 
 npm, Yarn, pnpm, and bun lockfiles, each `package.json` (including the optional Corepack `packageManager` field), and `run:` steps in GitHub Actions workflows and composite actions.
 
-Errors: two package managers' lockfiles in the same directory; a `package.json` with dependencies but no lockfile in that directory or above; a `packageManager` field that does not match the lockfile in scope; a CI step that runs `npm install` (or Yarn / bun without a frozen flag) instead of a lockfile-enforcing install. `package-lock.json` plus `npm-shrinkwrap.json` is valid npm, not mixed. `npm install some-package` (adding a dependency) is not flagged.
+Errors: two package managers' lockfiles in the same directory; a `package.json` with dependencies but no lockfile in that directory or above (unless library policy applies); a `packageManager` field that does not match the lockfile in scope; a CI step that runs `npm install` (or Yarn / bun without a frozen flag) instead of a lockfile-enforcing install. `package-lock.json` plus `npm-shrinkwrap.json` is valid npm, not mixed. `npm install some-package` (adding a dependency) is not flagged. Unfrozen CI installs are not flagged when library policy applies at the repository root, because a library that does not commit a lockfile cannot run `npm ci`.
 
-Warnings (do not fail the job): a `package.json` with no dependencies and no lockfile; bare `pnpm install` (pnpm already freezes when `CI=true`); bare `yarn install` when the repo's `yarn.lock` is Yarn Berry (immutable on CI by default). Make the flag explicit.
+Warnings (do not fail the job): a `package.json` with no dependencies and no lockfile; a missing lockfile when `.gitignore` lists lockfile names (or `lockfile-policy: library`); bare `pnpm install` (pnpm already freezes when `CI=true`); bare `yarn install` when the repo's `yarn.lock` is Yarn Berry (immutable on CI by default). Make the flag explicit.
 
-A workspace package may inherit a parent lockfile.
+A workspace package may inherit a parent lockfile. Manifests under `tests/fixtures`, `test/fixtures`, `__tests__/fixtures`, and `spec/fixtures` are skipped by default.
+
+**Why auto-detect instead of an opt-in-only flag.** Libraries such as ESLint and Express already declare the policy by gitignoring their lockfiles. Detecting that from `.gitignore` and downgrading to a warning is zero-config for those maintainers. An opt-in-only `lockfile-policy: library` input would keep failing their jobs until someone set it. The input still exists as an override: `library` forces the policy without a gitignore, and `app` keeps today's strict errors if the ignore was a mistake.
 
 ## Honest limits
 
-- Lite does not compare `package.json` to `package-lock.json`. It does not read Dockerfiles or `.gitignore` / `.dockerignore`. Those checks, a JSON report, and a local CLI are described on the [LockGate site](https://ess2292.github.io/lockgate/). Checkout is not live.
+- Lite does not compare `package.json` to `package-lock.json`. It does not read Dockerfiles or `.dockerignore`. It reads `.gitignore` only to detect a library lockfile policy; it does not emit a `lockfile-ignored` error (that check is in the full CLI). Those CLI-only checks, a JSON report, and a local command are described on the [LockGate site](https://ess2292.github.io/lockgate/). Checkout is not live.
 - Yarn, pnpm, and bun lockfiles are detected, not fully parsed for manifest sync.
 - Workflow parsing is best-effort, not a full YAML parser. Anchors and generated expressions can be missed. Inline comments on `run:` lines are ignored.
 - pnpm's default `--frozen-lockfile` in CI is respected: a bare `pnpm install` in GitHub Actions is a warning, because GitHub sets `CI=true`.
@@ -99,6 +103,11 @@ Questions and bug reports: [open an issue](https://github.com/ESS2292/lockgate-a
 LockGate checks whether the dependency install is frozen and repeatable. For Node.js version pins that drift across `.nvmrc`, Docker, and `setup-node`, the free [RuntimeGate Lite Action](https://github.com/ESS2292/runtimegate-action) fails the job when those declarations disagree. For missing environment variables, use the free [EnvGate Lite Action](https://github.com/ESS2292/envgate-action).
 
 ## Changelog
+
+### v1.0.1
+
+- Auto-detect a gitignored lockfile as a library policy: `missing-lockfile` becomes a warning, and unfrozen CI installs are not flagged. New `lockfile-policy` input (`auto`, `library`, or `app`).
+- Skip package manifests under `tests/fixtures`, `test/fixtures`, `__tests__/fixtures`, and `spec/fixtures` by default (`skip-fixtures`, default `true`).
 
 ### v1.0.0
 

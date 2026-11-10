@@ -1,6 +1,7 @@
 'use strict';
 
 const { classifyInstall, extractRunScriptsFromWorkflow } = require('./commands');
+const { libraryPolicyAt } = require('./policy');
 
 function posixJoin(dir, name) {
   return dir ? `${dir}/${name}` : name;
@@ -31,11 +32,14 @@ function yarnIsBerry(lockfiles) {
 /**
  * Lite analyze: mixed / missing lockfiles, packageManager mismatch, and
  * unfrozen GitHub Actions installs. Does not compare npm manifests to
- * lockfiles, and does not inspect Dockerfiles or ignore files.
+ * lockfiles, and does not inspect Dockerfiles. Reads .gitignore only to
+ * detect an intentional library lockfile policy.
  */
-function analyze(collected) {
+function analyze(collected, options = {}) {
   const findings = [];
   const manifests = collected.manifests || [];
+  const lockfilePolicy = options.lockfilePolicy;
+  const rootLibrary = libraryPolicyAt(collected, '', lockfilePolicy);
 
   const byDir = new Map();
   for (const lock of collected.lockfiles) {
@@ -66,13 +70,24 @@ function analyze(collected) {
         || (pkg.devDependencies && Object.keys(pkg.devDependencies).length)
         || (pkg.optionalDependencies && Object.keys(pkg.optionalDependencies).length),
       );
+      const policy = libraryPolicyAt(collected, manifest.dir, lockfilePolicy);
+      let severity = hasDeps ? 'error' : 'warning';
+      let message = hasDeps
+        ? `${manifest.file} has dependencies but no package-lock.json, yarn.lock, pnpm-lock.yaml, or bun.lock in this directory or above.`
+        : `${manifest.file} has no lockfile in this directory or above. A lockfile is still recommended so \`npm ci\` (and the others) can freeze an install.`;
+      if (policy.active) {
+        severity = 'warning';
+        if (policy.via === 'gitignore') {
+          message = `${manifest.file} has no lockfile in this directory or above. ${policy.ignoreFile} ignores ${policy.names.join(', ')}, which is a common library policy. This is a warning, not a failure.`;
+        } else {
+          message = `${manifest.file} has no lockfile in this directory or above. lockfile-policy=library treats that as intentional, so this is a warning, not a failure.`;
+        }
+      }
       findings.push({
-        severity: hasDeps ? 'error' : 'warning',
+        severity,
         code: 'missing-lockfile',
         file: manifest.file,
-        message: hasDeps
-          ? `${manifest.file} has dependencies but no package-lock.json, yarn.lock, pnpm-lock.yaml, or bun.lock in this directory or above.`
-          : `${manifest.file} has no lockfile in this directory or above. A lockfile is still recommended so \`npm ci\` (and the others) can freeze an install.`,
+        message,
       });
     }
   }
@@ -95,7 +110,10 @@ function analyze(collected) {
     }
   }
 
+  // Library repos that do not commit a lockfile cannot run npm ci; a bare
+  // npm install is expected. Skip unfrozen-ci when root library policy is on.
   for (const wf of collected.workflows) {
+    if (rootLibrary.active) break;
     const scripts = extractRunScriptsFromWorkflow(wf.text);
     for (const script of scripts) {
       const classified = classifyInstall(script.command);
